@@ -7,6 +7,12 @@
 <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+<!-- KaTeX -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -367,7 +373,6 @@ body {
 .md[dir="rtl"] blockquote { border-left: none; border-right: 4px solid var(--accent-2); border-radius: 8px 0 0 8px; }
 .md[dir="rtl"] th, .md[dir="rtl"] td { text-align: right; }
 .md[dir="rtl"] input[type="checkbox"] { margin-right: 0; margin-left: 6px; }
-/* code should always stay left-to-right, even inside RTL prose */
 .md[dir="rtl"] pre, .md[dir="rtl"] code { direction: ltr; text-align: left; }
 
 #source-content[dir="rtl"] { text-align: right; }
@@ -483,7 +488,7 @@ body {
     <div id="open-hint">Tip: Chrome blocks picking <b>Downloads</b>, <b>Documents</b>, <b>Desktop</b> or your home folder directly. Open a subfolder inside one of them instead (e.g. create <b>Downloads/Notes</b>).</div>
     <div id="no-api">⚠️ Requires Chrome or Edge. Firefox doesn't support the File System Access API.</div>
     <div id="search-wrap">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <input type="text" id="search" placeholder="Filter files…" autocomplete="off">
     </div>
     <div id="file-count"></div>
@@ -551,12 +556,12 @@ body {
 <script>
 // ── State ────────────────────────────────────────────────────────────
 let dirHandle   = null;
-let handles     = {};        // name → FileSystemFileHandle
+let handles     = {};
 let currentName = null;
 let content     = '';
 let mode        = 'view';
 let dirty       = false;
-let textDir     = 'ltr';     // 'ltr' | 'rtl' — current file's text direction
+let textDir     = 'ltr';
 const DIR_PREFS_KEY = 'md-viewer-dir-prefs';
 let dirPrefs = {};
 try { dirPrefs = JSON.parse(localStorage.getItem(DIR_PREFS_KEY) || '{}'); } catch(e) { dirPrefs = {}; }
@@ -615,8 +620,6 @@ function renderList(names) {
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── Text direction (LTR / RTL) ──────────────────────────────────────────
-// Auto-detects Arabic/Hebrew script so files open in the right direction
-// by default; the toolbar button lets you override per file.
 function detectDir(text) {
   const rtlChars = text.match(/[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/g) || [];
   const letters  = text.match(/[^\s\d\p{P}]/gu) || [];
@@ -677,7 +680,6 @@ function showFile() {
   document.getElementById('file-title').textContent = currentName;
   document.getElementById('save-btn').classList.remove('show','ok');
   document.getElementById('save-btn').textContent = 'Save';
-  // re-insert icon
   document.getElementById('save-btn').innerHTML =
     '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Save';
   setMode(mode);
@@ -687,12 +689,10 @@ function showFile() {
 function setMode(m) {
   mode = m;
 
-  // buttons
   document.getElementById('btn-view').classList.toggle('active', m === 'view');
   document.getElementById('btn-source').classList.toggle('active', m === 'source');
   document.getElementById('btn-edit').classList.toggle('active', m === 'edit');
 
-  // panels — clear show
   ['p-view','p-source','p-edit'].forEach(id => {
     const el = document.getElementById(id);
     el.classList.remove('show');
@@ -700,8 +700,23 @@ function setMode(m) {
 
   if (m === 'view') {
     const html = marked.parse(content);
-    document.getElementById('md-out').innerHTML = html;
+    const mdOut = document.getElementById('md-out');
+    mdOut.innerHTML = html;
+
+    // Coloration syntaxique
     document.querySelectorAll('#md-out pre code').forEach(b => hljs.highlightElement(b));
+
+    // Rendu mathématique KaTeX sécurisé
+    if (typeof renderMathInElement === 'function') {
+      renderMathInElement(mdOut, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$',  right: '$',  display: false }
+        ],
+        throwOnError: false
+      });
+    }
+
     document.getElementById('p-view').classList.add('show');
     document.getElementById('save-btn').classList.remove('show');
   } else if (m === 'source') {
@@ -787,7 +802,6 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// Warn on page unload if dirty
 window.addEventListener('beforeunload', e => {
   if (dirty) { e.preventDefault(); e.returnValue = ''; }
 });
@@ -797,7 +811,6 @@ const sidebar  = document.getElementById('sidebar');
 const resizer  = document.getElementById('resizer');
 const SIDEBAR_KEY = 'md-viewer-sidebar-w';
 
-// Restore saved width
 const savedW = localStorage.getItem(SIDEBAR_KEY);
 if (savedW) sidebar.style.width = savedW + 'px';
 
